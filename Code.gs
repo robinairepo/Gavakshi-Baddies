@@ -1,6 +1,7 @@
 // ============================================================
 // GAVAKSHI BADDIES — Attendance & Expense Tracker
-// Google Apps Script Backend — V5
+// Google Apps Script Backend — V6
+// Adds: count multiplier (sessions), expense paid_by, richer report
 // ============================================================
 
 const SHEET_PLAYERS  = "Players";
@@ -9,24 +10,35 @@ const SHEET_EXPENSES = "Expenses";
 const SHEET_PLAY_LOG = "PlayLog";
 const SHEET_META     = "Meta";
 
-// ── Setup: create sheets if missing ─────────────────────────
+// ── Setup: create sheets if missing, patch missing columns ──
 function setup() {
   const ss = SpreadsheetApp.getActiveSpreadsheet();
   ensureSheet(ss, SHEET_PLAYERS,  ["id","name","status","added_date","deactivated_date"]);
-  ensureSheet(ss, SHEET_SESSIONS, ["session_id","date","num_players","cost_type","cost_desc","amount","per_head","paid_by"]);
-  ensureSheet(ss, SHEET_EXPENSES, ["expense_id","date","amount","description","player_ids","expense_scope"]);
-  ensureSheet(ss, SHEET_PLAY_LOG, ["log_id","session_id","player_id","amount_owed"]);
+  ensureSheet(ss, SHEET_SESSIONS, ["session_id","date","num_players","cost_type","cost_desc","amount","per_head","paid_by","count_mult"]);
+  ensureSheet(ss, SHEET_EXPENSES, ["expense_id","date","amount","description","player_ids","expense_scope","paid_by"]);
+  ensureSheet(ss, SHEET_PLAY_LOG, ["log_id","session_id","player_id","amount_owed","play_count"]);
   ensureSheet(ss, SHEET_META,     ["key","value"]);
   return ok("Setup complete");
 }
 
+// Ensures a sheet exists AND has at least the given headers.
+// New columns are appended to existing sheets without touching data.
 function ensureSheet(ss, name, headers) {
   let sh = ss.getSheetByName(name);
   if (!sh) {
     sh = ss.insertSheet(name);
     sh.appendRow(headers);
     sh.setFrozenRows(1);
+    return sh;
   }
+  // Patch missing trailing columns
+  const lastCol = sh.getLastColumn();
+  const existing = lastCol > 0 ? sh.getRange(1, 1, 1, lastCol).getValues()[0] : [];
+  headers.forEach((h, i) => {
+    if (existing[i] !== h) {
+      sh.getRange(1, i + 1).setValue(h);
+    }
+  });
   return sh;
 }
 
@@ -54,10 +66,9 @@ function doPost(e) {
   }
 }
 
-function doGet() { return json(ok("Gavakshi Baddies API V5 live")); }
+function doGet() { return json(ok("Gavakshi Baddies API V6 live")); }
 
 // ── Players ─────────────────────────────────────────────────
-// Numeric IDs, assigned sequentially via Meta counter.
 function addPlayer({ name }) {
   const lock = LockService.getScriptLock();
   lock.waitLock(10000);
@@ -111,7 +122,8 @@ function setPlayerStatus({ id, status }) {
 }
 
 // ── Sessions ────────────────────────────────────────────────
-function saveSession({ date, num_players, cost_type, cost_desc, amount, paid_by, players }) {
+// count_mult (1-4): multiplies the play COUNT per player, never the money.
+function saveSession({ date, num_players, cost_type, cost_desc, amount, paid_by, players, count_mult }) {
   const lock = LockService.getScriptLock();
   lock.waitLock(15000);
   try {
@@ -119,18 +131,21 @@ function saveSession({ date, num_players, cost_type, cost_desc, amount, paid_by,
     const shS = ss.getSheetByName(SHEET_SESSIONS);
     const shL = ss.getSheetByName(SHEET_PLAY_LOG);
     const per = players.length > 0 ? (parseFloat(amount) / players.length) : 0;
+    let mult = parseInt(count_mult) || 1;
+    if (mult < 1) mult = 1;
+    if (mult > 4) mult = 4;
 
     // Idempotent: remove any existing rows for this date first
     deleteSessionByDate(ss, date);
 
     const sid = "S" + Date.now();
-    shS.appendRow([sid, date, num_players, cost_type, cost_desc, parseFloat(amount), round2(per), String(paid_by||"")]);
+    shS.appendRow([sid, date, num_players, cost_type, cost_desc, parseFloat(amount), round2(per), String(paid_by||""), mult]);
     players.forEach(pid => {
-      shL.appendRow(["L" + Date.now() + Math.random().toString(36).slice(2), sid, String(pid), round2(per)]);
+      shL.appendRow(["L" + Date.now() + Math.random().toString(36).slice(2), sid, String(pid), round2(per), mult]);
     });
 
     SpreadsheetApp.flush();
-    return ok({ session_id: sid, date, per_head: round2(per), saved: true });
+    return ok({ session_id: sid, date, per_head: round2(per), count_mult: mult, saved: true });
   } finally {
     lock.releaseLock();
   }
@@ -169,19 +184,20 @@ function getSession({ date }) {
     amount: session.amount,
     per_head: session.per_head,
     paid_by: session.paid_by || "",
+    count_mult: parseInt(session.count_mult) || 1,
     players: logs.map(r => r.player_id)
   });
 }
 
 // ── Expenses ────────────────────────────────────────────────
-function saveExpense({ date, amount, description, player_ids, expense_scope }) {
+function saveExpense({ date, amount, description, player_ids, expense_scope, paid_by }) {
   const lock = LockService.getScriptLock();
   lock.waitLock(10000);
   try {
     const ss = SpreadsheetApp.getActiveSpreadsheet();
     const sh = ss.getSheetByName(SHEET_EXPENSES);
     const eid = "E" + Date.now();
-    sh.appendRow([eid, date, parseFloat(amount), description, (player_ids||[]).map(String).join(","), expense_scope||"player"]);
+    sh.appendRow([eid, date, parseFloat(amount), description, (player_ids||[]).map(String).join(","), expense_scope||"player", String(paid_by||"")]);
     SpreadsheetApp.flush();
     return ok({ expense_id: eid, saved: true });
   } finally {
@@ -195,7 +211,8 @@ function getExpenses({ from, to }) {
     expense_id: r.expense_id, date: r.date, amount: r.amount,
     description: r.description,
     player_ids: r.player_ids ? r.player_ids.split(",").filter(Boolean) : [],
-    expense_scope: r.expense_scope || "player"
+    expense_scope: r.expense_scope || "player",
+    paid_by: r.paid_by || ""
   })));
 }
 
@@ -209,6 +226,10 @@ function getReport({ from, to }) {
   const sidSet = {};
   sessions.forEach(s => { sidSet[s.session_id] = s; });
 
+  const nameById = {};
+  players.forEach(p => { nameById[p.id] = p.name; });
+
+  // ── Section 1: player summary (count incorporates multiplier) ──
   const report = {};
   players.forEach(p => {
     report[p.id] = {
@@ -223,9 +244,10 @@ function getReport({ from, to }) {
     if (!s || !report[l.player_id]) return;
     const dow = new Date(s.date + "T00:00:00").getDay();
     const isWeekend = (dow === 0 || dow === 6);
-    const amt = parseFloat(l.amount_owed) || 0;
-    if (isWeekend) { report[l.player_id].weekend_sessions++; report[l.player_id].weekend_cost += amt; }
-    else           { report[l.player_id].weekday_sessions++; report[l.player_id].weekday_cost += amt; }
+    const amt = parseFloat(l.amount_owed) || 0;          // money: NOT multiplied
+    const cnt = parseInt(l.play_count) || 1;             // count: multiplied
+    if (isWeekend) { report[l.player_id].weekend_sessions += cnt; report[l.player_id].weekend_cost += amt; }
+    else           { report[l.player_id].weekday_sessions += cnt; report[l.player_id].weekday_cost += amt; }
   });
 
   // Player-split incidental expenses fold into cost (not session count)
@@ -242,11 +264,51 @@ function getReport({ from, to }) {
     });
   });
 
+  // ── Section 2: who paid for the court (weekday / weekend / total) ──
+  const courtPaid = {};
+  sessions.forEach(s => {
+    const payer = String(s.paid_by || "");
+    if (!payer) return;
+    if (!courtPaid[payer]) courtPaid[payer] = { id: payer, name: nameById[payer] || ("#" + payer), weekday_paid: 0, weekend_paid: 0 };
+    const dow = new Date(s.date + "T00:00:00").getDay();
+    const isWeekend = (dow === 0 || dow === 6);
+    const amt = parseFloat(s.amount) || 0;
+    if (isWeekend) courtPaid[payer].weekend_paid += amt;
+    else           courtPaid[payer].weekday_paid += amt;
+  });
+  const courtPaidArr = Object.values(courtPaid).map(c => ({
+    id: c.id, name: c.name,
+    weekday_paid: round2(c.weekday_paid),
+    weekend_paid: round2(c.weekend_paid),
+    total_paid:   round2(c.weekday_paid + c.weekend_paid)
+  }));
+
+  // ── Section 3 & 4: expense detail (date, paid_by, amount, desc, split) ──
+  const expenseDetail = expenses.map(e => {
+    const pids = e.player_ids ? e.player_ids.split(",").filter(Boolean) : [];
+    return {
+      date: e.date,
+      amount: parseFloat(e.amount) || 0,
+      description: e.description,
+      paid_by: e.paid_by || "",
+      paid_by_name: e.paid_by ? (nameById[e.paid_by] || ("#" + e.paid_by)) : "—",
+      expense_scope: e.expense_scope || "player",
+      split_ids: pids,
+      split_names: pids.map(pid => nameById[pid] || ("#" + pid))
+    };
+  });
+
+  // Kept for backward-compat with any older frontend
   const groupExpenses = expenses
     .filter(e => (e.expense_scope||"player") === "group")
     .map(e => ({ date: e.date, amount: parseFloat(e.amount), description: e.description }));
 
-  return ok({ players: Object.values(report), group_expenses: groupExpenses });
+  return ok({
+    players: Object.values(report),
+    court_paid_by: courtPaidArr,
+    expenses: expenseDetail,
+    group_expenses: groupExpenses
+  });
 }
 
 // ── Helpers ─────────────────────────────────────────────────

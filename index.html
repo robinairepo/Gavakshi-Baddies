@@ -5,10 +5,10 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="default">
-<meta name="apple-mobile-web-app-title" content="Gavakshi Baddies">
+<meta name="apple-mobile-web-app-title" content="Gavakshi Baddies-V2">
 <meta name="theme-color" content="#0d9488">
 <link rel="manifest" href="manifest.json">
-<title>Gavakshi Baddies</title>
+<title>Gavakshi Baddies-V2</title>
 <style>
 :root {
   --bg:#f4f6f8; --surface:#ffffff; --card:#ffffff; --card2:#f0f4f5;
@@ -132,7 +132,7 @@ input[type="date"] { min-height:46px; }
 
 <div id="config-screen">
   <div class="cfg-logo">🏸</div>
-  <div class="cfg-title">Gavakshi Baddies</div>
+  <div class="cfg-title">Gavakshi Baddies-V2</div>
   <p class="cfg-sub">Paste your Google Apps Script Web App URL to connect your Google Sheet.</p>
   <div style="width:100%;max-width:360px">
     <label>Apps Script Web App URL</label>
@@ -158,7 +158,7 @@ input[type="date"] { min-height:46px; }
   <div id="header">
     <div class="logo">🏸</div>
     <div>
-      <div id="h1">Gavakshi Baddies</div>
+      <div id="h1">Gavakshi Baddies-V2</div>
       <div class="sub" id="header-sub">Loading…</div>
     </div>
     <button id="settings-btn" onclick="resetApiUrl()" title="Change URL">⚙</button>
@@ -211,13 +211,30 @@ input[type="date"] { min-height:46px; }
             <select id="att-num-players" onchange="calcPerHead()"><option value="">—</option></select>
           </div>
         </div>
-        <div class="form-row" style="margin-bottom:0">
-          <label>Paid By</label>
-          <select id="att-paid-by"><option value="">— Select who paid —</option></select>
+        <div class="form-2col">
+          <div>
+            <label>Paid By</label>
+            <select id="att-paid-by"><option value="">— Who paid —</option></select>
+          </div>
+          <div>
+            <label>Hour Multiplier</label>
+            <select id="att-count-mult" onchange="calcPerHead()">
+              <option value="1">1× (1 hr)</option>
+              <option value="2">2× (2 hrs)</option>
+              <option value="3">3× (3 hrs)</option>
+              <option value="4">4× (4 hrs)</option>
+            </select>
+          </div>
         </div>
         <div class="per-head-box" id="per-head-box" style="display:none">
-          <span class="label">Per Head</span>
-          <span class="value" id="per-head-amt">₹0</span>
+          <div>
+            <span class="label">Per Head</span>
+            <span class="value" id="per-head-amt">₹0</span>
+          </div>
+          <div style="text-align:right">
+            <span class="label">Count</span>
+            <span class="value" id="per-head-count">1</span>
+          </div>
         </div>
       </div>
       <div class="row-between" style="margin-top:4px">
@@ -239,6 +256,10 @@ input[type="date"] { min-height:46px; }
           <div><label>Amount (₹)</label><input type="number" id="exp-amount" placeholder="0" /></div>
         </div>
         <div class="form-row"><label>Description</label><input type="text" id="exp-desc" placeholder="e.g. Extra shuttles" /></div>
+        <div class="form-row">
+          <label>Paid By</label>
+          <select id="exp-paid-by"><option value="">— Who bore this expense —</option></select>
+        </div>
         <div class="form-row">
           <label>Expense Type</label>
           <div class="pills">
@@ -426,8 +447,14 @@ function updateDropdowns() {
   for (let i=1;i<=active.length;i++) sel.innerHTML += `<option value="${i}" ${String(i)===cur?"selected":""}>${i}</option>`;
   const pb = document.getElementById("att-paid-by");
   const curPb = pb.value;
-  pb.innerHTML = `<option value="">— Select who paid —</option>`;
+  pb.innerHTML = `<option value="">— Who paid —</option>`;
   active.forEach(p => pb.innerHTML += `<option value="${p.id}" ${String(p.id)===curPb?"selected":""}>${p.name}</option>`);
+  const epb = document.getElementById("exp-paid-by");
+  if (epb) {
+    const curEpb = epb.value;
+    epb.innerHTML = `<option value="">— Who bore this expense —</option>`;
+    active.forEach(p => epb.innerHTML += `<option value="${p.id}" ${String(p.id)===curEpb?"selected":""}>${p.name}</option>`);
+  }
 }
 
 function updateAttPlayerList() {
@@ -462,9 +489,13 @@ function selectPill(btn) {
 function calcPerHead() {
   const amt = parseFloat(document.getElementById("att-amount").value)||0;
   const n = parseInt(document.getElementById("att-num-players").value)||0;
+  const mult = parseInt(document.getElementById("att-count-mult").value)||1;
   const box = document.getElementById("per-head-box");
-  if (amt>0 && n>0) { box.style.display="flex"; document.getElementById("per-head-amt").textContent = `₹${(amt/n).toFixed(2)}`; }
-  else box.style.display="none";
+  if (amt>0 && n>0) {
+    box.style.display="flex";
+    document.getElementById("per-head-amt").textContent = `₹${(amt/n).toFixed(2)}`;
+    document.getElementById("per-head-count").textContent = mult;
+  } else box.style.display="none";
 }
 
 async function onDateChange() {
@@ -477,6 +508,7 @@ function resetAttForm() {
   document.getElementById("att-num-players").value = "";
   document.getElementById("att-other-desc").value = "";
   document.getElementById("att-paid-by").value = "";
+  document.getElementById("att-count-mult").value = "1";
   document.getElementById("other-desc-row").style.display = "none";
   document.getElementById("per-head-box").style.display = "none";
   document.querySelectorAll(".pill[data-type]").forEach(b=>b.classList.remove("selected"));
@@ -496,6 +528,7 @@ async function loadSession() {
       document.getElementById("att-amount").value = session.amount;
       document.getElementById("att-num-players").value = session.num_players;
       document.getElementById("att-paid-by").value = session.paid_by || "";
+      document.getElementById("att-count-mult").value = String(session.count_mult || 1);
       document.querySelectorAll(".pill[data-type]").forEach(b=>b.classList.remove("selected"));
       const mp = document.querySelector(`.pill[data-type="${session.cost_type}"]`);
       if (mp) mp.classList.add("selected");
@@ -519,6 +552,7 @@ async function saveSession() {
   const cost_type = document.querySelector(".pill[data-type].selected")?.dataset.type || "Court";
   const cost_desc = cost_type==="Other" ? document.getElementById("att-other-desc").value : cost_type;
   const paid_by = document.getElementById("att-paid-by").value;
+  const count_mult = document.getElementById("att-count-mult").value || "1";
   const chosenPids = [...document.querySelectorAll("#att-players-list input:checked")].map(c=>c.value);
   if (!date) return showToast("Pick a date", true);
   if (!amount) return showToast("Enter amount", true);
@@ -527,9 +561,11 @@ async function saveSession() {
   if (chosenPids.length === 0) return showToast("Select at least one player", true);
   btn.disabled = true; btn.textContent = "Saving…"; showLoader(true);
   try {
-    const res = await apiCall("saveSession", { date, num_players, cost_type, cost_desc, amount, paid_by, players:chosenPids });
-    if (res && res.saved) showModal("✓", "Attendance Saved", `Recorded for ${fmtDate(date)} — ₹${res.per_head}/head across ${chosenPids.length} player${chosenPids.length===1?"":"s"}.`);
-    else showModal("!", "Something went wrong", "The server did not confirm the save. Please try again.", true);
+    const res = await apiCall("saveSession", { date, num_players, cost_type, cost_desc, amount, paid_by, players:chosenPids, count_mult });
+    if (res && res.saved) {
+      const cntNote = (res.count_mult > 1) ? ` · count ${res.count_mult} each` : "";
+      showModal("✓", "Attendance Saved", `Recorded for ${fmtDate(date)} — ₹${res.per_head}/head across ${chosenPids.length} player${chosenPids.length===1?"":"s"}${cntNote}.`);
+    } else showModal("!", "Something went wrong", "The server did not confirm the save. Please try again.", true);
   } catch(e) { showModal("!", "Save Failed", e.message, true); }
   showLoader(false);
   btn.disabled = false; btn.textContent = "Save Attendance";
@@ -574,19 +610,22 @@ async function saveExpense() {
   const date = document.getElementById("exp-date").value;
   const amount = document.getElementById("exp-amount").value;
   const desc = document.getElementById("exp-desc").value.trim();
+  const paid_by = document.getElementById("exp-paid-by").value;
   const scope = document.querySelector(".pill[data-scope].selected")?.dataset.scope || "player";
   const pids = scope==="group" ? [] : [...document.querySelectorAll("#exp-players-list input:checked")].map(c=>c.value);
   if (!date) return showToast("Pick a date", true);
   if (!amount) return showToast("Enter amount", true);
   if (!desc) return showToast("Enter description", true);
+  if (!paid_by) return showToast("Select who paid", true);
   if (scope==="player" && pids.length===0) return showToast("Select at least one player", true);
   btn.disabled = true; btn.textContent = "Saving…"; showLoader(true);
   try {
-    const res = await apiCall("saveExpense", { date, amount, description:desc, player_ids:pids, expense_scope:scope });
+    const res = await apiCall("saveExpense", { date, amount, description:desc, player_ids:pids, expense_scope:scope, paid_by });
     if (res && res.saved) {
       document.getElementById("exp-amount").value = "";
       document.getElementById("exp-desc").value = "";
       document.getElementById("exp-date").value = "";
+      document.getElementById("exp-paid-by").value = "";
       document.querySelectorAll("#exp-players-list input").forEach(c=>c.checked=false);
       onExpCheckChange();
       showModal("✓", "Expense Saved", `₹${parseFloat(amount).toLocaleString('en-IN')} recorded.`);
@@ -632,41 +671,96 @@ async function generateReport() {
 function renderReport(result, from, to) {
   const el = document.getElementById("report-output");
   const rows = result.players || [];
-  const groupExp = result.group_expenses || [];
+  const courtPaid = result.court_paid_by || [];
+  const expenses = result.expenses || [];
   const played = rows.filter(r=>(r.weekday_sessions+r.weekend_sessions)>0).sort((a,b)=>a.name.localeCompare(b.name));
-  if (!played.length && !groupExp.length) { el.innerHTML = `<div class="empty"><div class="ei">📊</div><p>No data for this period</p></div>`; return; }
-  const grandTotal = played.reduce((s,r)=>s+r.weekday_cost+r.weekend_cost,0);
+
+  if (!played.length && !courtPaid.length && !expenses.length) {
+    el.innerHTML = `<div class="empty"><div class="ei">\u{1F4CA}</div><p>No data for this period</p></div>`;
+    return;
+  }
+
+  const courtTotal = played.reduce((s,r)=>s+r.weekday_cost+r.weekend_cost,0);
+  const expenseTotal = expenses.reduce((s,e)=>s+e.amount,0);
+
   let html = `<div class="stat-row">
-    <div class="stat-box"><div class="s-label">Period</div><div style="font-size:13px;font-weight:700">${fmtDate(from)} – ${fmtDate(to)}</div></div>
-    <div class="stat-box"><div class="s-label">Total Spend</div><div class="s-val c-orange">₹${grandTotal.toLocaleString('en-IN',{maximumFractionDigits:0})}</div></div>
+    <div class="stat-box"><div class="s-label">Period</div><div style="font-size:13px;font-weight:700">${fmtDate(from)} \u2013 ${fmtDate(to)}</div></div>
+    <div class="stat-box"><div class="s-label">Total Spend</div><div class="s-val c-orange">\u20B9${(courtTotal+expenseTotal).toLocaleString('en-IN',{maximumFractionDigits:0})}</div></div>
   </div>`;
+
+  // ── Section 1: Player Summary ──
   if (played.length) {
     const totWD = played.reduce((s,r)=>s+r.weekday_sessions,0);
     const totWE = played.reduce((s,r)=>s+r.weekend_sessions,0);
-    html += `<div class="report-section-title">Player Summary</div><div class="rtable-wrap"><table class="rtable"><thead><tr><th>Player</th><th class="num">Weekdays</th><th class="num">Weekends</th><th class="num">Amount&nbsp;₹</th></tr></thead><tbody>`;
+    html += `<div class="report-section-title">1 \u00B7 Player Summary</div><div class="rtable-wrap"><table class="rtable"><thead><tr><th>Player</th><th class="num">Weekdays</th><th class="num">Weekends</th><th class="num">Amount&nbsp;\u20B9</th></tr></thead><tbody>`;
     played.forEach(r=>{ html += `<tr><td style="font-weight:600">${r.name}</td><td class="num">${r.weekday_sessions}</td><td class="num c-purple">${r.weekend_sessions}</td><td class="num c-orange">${(r.weekday_cost+r.weekend_cost).toFixed(0)}</td></tr>`; });
-    html += `<tr class="tot-row"><td>Total</td><td class="num">${totWD}</td><td class="num c-purple">${totWE}</td><td class="num c-orange">${grandTotal.toFixed(0)}</td></tr></tbody></table></div>`;
+    html += `<tr class="tot-row"><td>Total</td><td class="num">${totWD}</td><td class="num c-purple">${totWE}</td><td class="num c-orange">${courtTotal.toFixed(0)}</td></tr></tbody></table></div>`;
   }
-  if (groupExp.length) {
-    const gt = groupExp.reduce((s,e)=>s+e.amount,0);
-    html += `<div class="report-section-title" style="margin-top:16px">Group Expenses (Unallocated)</div><div class="rtable-wrap"><table class="rtable"><thead><tr><th>Date</th><th>Description</th><th class="num">₹</th></tr></thead><tbody>`;
-    groupExp.sort((a,b)=>a.date.localeCompare(b.date)).forEach(e=>{ html += `<tr><td>${fmtDate(e.date)}</td><td>${e.description}</td><td class="num c-orange">${e.amount.toFixed(0)}</td></tr>`; });
-    html += `<tr class="tot-row"><td colspan="2">Total</td><td class="num c-orange">${gt.toFixed(0)}</td></tr></tbody></table></div>`;
+
+  // ── Section 2: Court Paid By ──
+  if (courtPaid.length) {
+    const cp = [...courtPaid].sort((a,b)=>a.name.localeCompare(b.name));
+    const tWD = cp.reduce((s,c)=>s+c.weekday_paid,0);
+    const tWE = cp.reduce((s,c)=>s+c.weekend_paid,0);
+    const tT = cp.reduce((s,c)=>s+c.total_paid,0);
+    html += `<div class="report-section-title" style="margin-top:16px">2 \u00B7 Court Paid By</div><div class="rtable-wrap"><table class="rtable"><thead><tr><th>Player</th><th class="num">Weekday&nbsp;\u20B9</th><th class="num">Weekend&nbsp;\u20B9</th><th class="num">Total&nbsp;\u20B9</th></tr></thead><tbody>`;
+    cp.forEach(c=>{ html += `<tr><td style="font-weight:600">${c.name}</td><td class="num">${c.weekday_paid.toFixed(0)}</td><td class="num c-purple">${c.weekend_paid.toFixed(0)}</td><td class="num c-orange">${c.total_paid.toFixed(0)}</td></tr>`; });
+    html += `<tr class="tot-row"><td>Total</td><td class="num">${tWD.toFixed(0)}</td><td class="num c-purple">${tWE.toFixed(0)}</td><td class="num c-orange">${tT.toFixed(0)}</td></tr></tbody></table></div>`;
   }
-  html += `<button class="btn btn-ghost btn-full" style="margin-top:16px" onclick="exportCSV()">⬇ Export CSV</button>`;
+
+  // ── Section 3: Expenses ──
+  if (expenses.length) {
+    const expSorted = [...expenses].sort((a,b)=>a.date.localeCompare(b.date));
+    html += `<div class="report-section-title" style="margin-top:16px">3 \u00B7 Expenses</div><div class="rtable-wrap"><table class="rtable"><thead><tr><th>Date</th><th>Paid By</th><th>Description</th><th class="num">\u20B9</th></tr></thead><tbody>`;
+    expSorted.forEach(e=>{ html += `<tr><td>${fmtDate(e.date)}</td><td>${e.paid_by_name}</td><td>${e.description}</td><td class="num c-orange">${e.amount.toFixed(0)}</td></tr>`; });
+    html += `<tr class="tot-row"><td colspan="3">Total</td><td class="num c-orange">${expenseTotal.toFixed(0)}</td></tr></tbody></table></div>`;
+  }
+
+  // ── Section 4: Expense Split ──
+  if (expenses.length) {
+    const expSorted = [...expenses].sort((a,b)=>a.date.localeCompare(b.date));
+    html += `<div class="report-section-title" style="margin-top:16px">4 \u00B7 Expense Split</div><div class="rtable-wrap"><table class="rtable"><thead><tr><th>Date</th><th>Description</th><th>Split Against</th></tr></thead><tbody>`;
+    expSorted.forEach(e=>{
+      const splitTxt = e.expense_scope === "group" ? `<span style="color:var(--purple)">Group (undivided)</span>` : (e.split_names.length ? e.split_names.join(", ") : "\u2014");
+      html += `<tr><td>${fmtDate(e.date)}</td><td>${e.description}</td><td style="white-space:normal">${splitTxt}</td></tr>`;
+    });
+    html += `</tbody></table></div>`;
+  }
+
+  html += `<button class="btn btn-ghost btn-full" style="margin-top:16px" onclick="exportCSV()">\u2B07 Export CSV</button>`;
   el.innerHTML = html;
-  window._reportData = { played, groupExp, from, to };
+  window._reportData = { played, courtPaid, expenses, from, to };
 }
 
 function exportCSV() {
   const d = window._reportData;
   if (!d) return showToast("Generate a report first", true);
-  const lines = ["Player,Weekdays Played,Weekends Played,Total Amount"];
-  d.played.forEach(r=>lines.push([r.name, r.weekday_sessions, r.weekend_sessions, (r.weekday_cost+r.weekend_cost).toFixed(2)].join(",")));
-  if (d.groupExp.length) {
-    lines.push("", "Group Expenses (Unallocated)", "Date,Description,Amount");
-    d.groupExp.forEach(e=>lines.push(`${fmtDate(e.date)},${e.description},${e.amount.toFixed(2)}`));
+  const lines = [];
+
+  lines.push("SECTION 1 - PLAYER SUMMARY");
+  lines.push("Player,Weekdays Played,Weekends Played,Total Amount");
+  d.played.forEach(r=>lines.push([csv(r.name), r.weekday_sessions, r.weekend_sessions, (r.weekday_cost+r.weekend_cost).toFixed(2)].join(",")));
+
+  if (d.courtPaid.length) {
+    lines.push("", "SECTION 2 - COURT PAID BY");
+    lines.push("Player,Weekday Paid,Weekend Paid,Total Paid");
+    [...d.courtPaid].sort((a,b)=>a.name.localeCompare(b.name)).forEach(c=>lines.push([csv(c.name), c.weekday_paid.toFixed(2), c.weekend_paid.toFixed(2), c.total_paid.toFixed(2)].join(",")));
   }
+
+  if (d.expenses.length) {
+    const exp = [...d.expenses].sort((a,b)=>a.date.localeCompare(b.date));
+    lines.push("", "SECTION 3 - EXPENSES");
+    lines.push("Date,Paid By,Description,Amount");
+    exp.forEach(e=>lines.push([fmtDate(e.date), csv(e.paid_by_name), csv(e.description), e.amount.toFixed(2)].join(",")));
+
+    lines.push("", "SECTION 4 - EXPENSE SPLIT");
+    lines.push("Date,Description,Split Against");
+    exp.forEach(e=>{
+      const split = e.expense_scope === "group" ? "Group (undivided)" : e.split_names.join("; ");
+      lines.push([fmtDate(e.date), csv(e.description), csv(split)].join(","));
+    });
+  }
+
   const blob = new Blob([lines.join("\n")], { type:"text/csv" });
   const url = URL.createObjectURL(blob);
   const a = document.createElement("a");
@@ -674,7 +768,12 @@ function exportCSV() {
   a.click(); URL.revokeObjectURL(url);
 }
 
-async function switchTab(btn) {
+function csv(s) {
+  s = String(s == null ? "" : s);
+  return /[",\n]/.test(s) ? '"' + s.replace(/"/g,'""') + '"' : s;
+}
+
+function switchTab(btn) {
   document.querySelectorAll(".tab").forEach(t=>t.classList.remove("active"));
   btn.classList.add("active");
   document.querySelectorAll(".screen").forEach(s=>s.classList.remove("active"));

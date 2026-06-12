@@ -55,6 +55,18 @@ Then paste your Apps Script URL → **Connect & Setup**.
 
 ---
 
+## What's new in V6
+- **Count multiplier** on attendance — defaults to 1, choose up to 4. For a 2-hour weekend booking, set it to 2: the money still splits per head as usual, but each player gets 2 counts toward their weekday/weekend totals.
+- **"Paid By" on expenses** — record who bore each expense.
+- **Richer reports** — four sections now:
+  1. Player Summary (counts include the multiplier)
+  2. Court Paid By (who paid for court — weekday, weekend, total)
+  3. Expenses (date, paid by, description, amount)
+  4. Expense Split (who each expense is split against)
+- CSV export includes all four sections.
+
+> **Existing data:** the new columns are added automatically the next time the app connects (the setup runs on connect). Your one existing weekend session should be deleted and re-entered so you can set its multiplier.
+
 ## What's new in V5
 - Clean **light theme** (no dark mode)
 - **Empty date pickers** — tap to pick, today is the default highlighted date
